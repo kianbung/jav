@@ -3,7 +3,8 @@
 import os, re, logging, requests, bs4, shelve, shutil, send2trash
 logging.basicConfig(level=logging.DEBUG,format='%(asctime)s - %(levelname)s - %(message)s')
 logging.disable(logging.DEBUG)
-javCode = ['club','ssni', 'snis', 'abp', 'ipx', 'pppd', 'ebod']
+# javCode = ['club','ssni', 'snis', 'abp', 'ipx', 'pppd', 'ebod']
+javCodes = ['ssni', 'abp']
 
 baseFolder = r'D:\Torrents (Pre-March 2020)\pon'
 shelfLocalDB = shelve.open('javActressDB')
@@ -16,17 +17,14 @@ def actressOnlineSearch(javCode):
     javSearch = requests.get(url)
     javSoup = bs4.BeautifulSoup(javSearch.text, 'html.parser')
     actressSelect = javSoup.select('body > div > div:nth-child(2) > div > div > div.column.is-5 > div > div.panel > a')
-    if actressSelect:
-        actressName = actressSelect[0].getText()
-    else:
-        actressName = 'None'
-    logging.info('Retrieved actress name from OneJAV: ' + actressName)
+    actressName = actressSelect[0].getText() if actressSelect else None
+    logging.info(f'Retrieved actress name from OneJAV: {actressName}' if actressName else 'No actress match on OneJAV')
     return actressName
 
 def actressSearch(javCode):
 
     if javCode in actressLocalDB.keys():
-        logging.info('Matched ' + javCode + ' to ' + actressLocalDB[javCode] + ' locally')
+        logging.info(f'Matched {javCode} to {actressLocalDB[javCode]}' if actressLocalDB[javCode] else 'Local null match')
         return actressLocalDB[javCode]
     else:
         actressName = actressOnlineSearch(javCode)
@@ -40,14 +38,15 @@ for folderName, subList, fileList in os.walk(baseFolder):
     for fileName in fileList:
         fileName, fileExt = os.path.splitext(fileName)
 
-        for i in range(len(javCode)):
-            javRegex = re.compile(r'(.*)((' + javCode[i] + r')-?(\d+))', re.I)
+        for javCode in javCodes:
+            javRegex = re.compile(r'(.*)((' + javCode + r')-?(\d+))', re.I)
             javDetect = javRegex.findall(fileName)
 
             if javDetect:
                 toRename = False
                 renameReasons = []
                 fullOldPath = folderName + '\\' + fileName + fileExt
+                
                 logging.info('---')
                 logging.info('Scanned: + ' + fullOldPath)
                 logging.debug(javDetect)
@@ -56,7 +55,7 @@ for folderName, subList, fileList in os.walk(baseFolder):
 
                 actressName = actressSearch(javDetect[0][2].upper() + javDetect[0][3]) # uppercase search
 
-                if actressName and actressName != 'None':
+                if actressName:
                     actressRegex = re.compile(r'.*\(' + actressName + r'\).*')
                     actressDetect = actressRegex.search(fileName)
                     if not actressDetect:
@@ -78,12 +77,11 @@ for folderName, subList, fileList in os.walk(baseFolder):
                     renameReasons.append('code not uppercase')
                 
                 if toRename:
-                    if actressName and actressName != 'None':
-                        newName = javDetect[0][2].upper() + '-' + javDetect[0][3] + ' (' + actressName + ')' + fileExt
-                    else:
-                        newName = javDetect[0][2].upper() + '-' + javDetect[0][3] + fileExt
+                    actressNameParens = f' ({actressName})' if actressName else ''
+                    newName = f'{javDetect[0][2].upper()}-{javDetect[0][3]}{actressNameParens}{fileExt}'
+                    
                     fullNewPath = folderName + '\\' + newName
-                    logging.info('Rename to: ' + fullNewPath)
+                    logging.info('Renamed to: ' + fullNewPath)
                     logging.info('Reason: ' + ', '.join(renameReasons))
                     shutil.move(fullOldPath,fullNewPath)
 
